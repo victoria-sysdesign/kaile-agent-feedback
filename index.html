@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Weekly Agent Check-in</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap">
+<style>
+:root{--bg:#FFFFFF;--surface:#F9FAFB;--ink:#0A0A0A;--muted:#4A5565;--line:rgba(0,0,0,.12);--accent:#EC003F;--accent-ink:#FFFFFF;--chip:#FFF0F3;--chip-ink:#A3002B;--font:"Inter",-apple-system,BlinkMacSystemFont,sans-serif}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 var(--font);padding-block:0 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+.wrap{max-width:640px;margin:0 auto}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(34px,9vw,52px);font-weight:300;letter-spacing:-.04em;line-height:1.08;text-wrap:balance}
+.eyebrow{font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);max-width:52ch}
+header{display:flex;flex-direction:column;gap:12px;padding-top:max(32px,env(safe-area-inset-top,0px))}
+.bar{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+main{display:flex;flex-direction:column;gap:28px;padding-top:28px}
+.q{display:flex;flex-direction:column;gap:12px}
+.q h2{font-size:21px;font-weight:400;letter-spacing:-.015em;line-height:1.25}
+.hint{color:var(--muted);font-size:15px}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;gap:12px;align-items:flex-start;min-height:48px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font:inherit;text-align:left;width:100%;cursor:pointer;color:inherit}
+.mk{flex:none;width:22px;height:22px;border:2px solid var(--muted);border-radius:50%;margin-top:1px}
+.opt.multi .mk{border-radius:6px}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--chip)}
+.opt[aria-pressed="true"] .mk{background:var(--accent);border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--chip)}
+.opt.multi[aria-pressed="true"] .mk{box-shadow:none}
+.scale{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.scale button{min-height:52px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font:inherit;font-size:17px;font-weight:500;cursor:pointer;color:inherit}
+.scale button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.legend{display:flex;flex-direction:column;gap:4px;font-size:15px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.legend b{font-weight:600;color:var(--ink);display:inline-block;width:20px}
+textarea{width:100%;min-height:96px;font:inherit;font-size:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);resize:vertical}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.foot{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:24px}
+.btn{min-height:54px;border-radius:100px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:500;cursor:pointer}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.status{color:var(--muted);font-size:14px;min-height:1.4em}
+.done{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px}
+.bad{padding-top:max(48px,env(safe-area-inset-top,0px));display:flex;flex-direction:column;gap:12px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+var SB_URL="https://pjcwyvatubdrlxanprtw.supabase.co";
+var SB_KEY="sb_publishable_tPcuSlnzv7S5XjYBwKhdlQ_eOPqCxbD";
+var P=new URLSearchParams(location.search);
+var TOKEN=(P.get("k")||"").trim();
+var WEEK=weekOf(P.get("w"));
+var KEY="agent-feedback:"+WEEK;
+var app=document.getElementById("app");
+var S={ans:{},valid:null,sent:false,saveErr:false,timer:0};
+
+function weekOf(o){
+  if(o&&/^\d{4}-\d{2}-\d{2}$/.test(o))return o;
+  var p=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit",weekday:"short"}).formatToParts(new Date()),g={};
+  p.forEach(function(x){g[x.type]=x.value});
+  var dow={Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6}[g.weekday];
+  var d=new Date(Date.UTC(+g.year,+g.month-1,+g.day-dow));
+  return d.toISOString().slice(0,10);
+}
+function label(w){var d=new Date(w+"T12:00:00Z");return d.toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"})}
+function rpc(fn,body){return fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:{"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})}
+function esc(t){return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+
+var Q=[
+ {id:"used",type:"one",req:true,t:"Did you use the scheduling agent this week?",o:[["regular","Yes, regularly"],["little","A little"],["none","Not this week"]]},
+ {id:"helped",type:"scale",req:true,when:usedAny,t:"How much did it take off your plate?",legend:["Made extra work for me","Mostly got in the way","About break-even","Helped on most days","Took scheduling off my plate"]},
+ {id:"drafts",type:"one",req:true,when:usedAny,t:"How did its email drafts usually go?",o:[["as_written","Sent as written"],["small","Small edits, then sent"],["rewrote","I rewrote most of it"],["unused","I mostly did not use them"]]},
+ {id:"issues",type:"multi",req:true,when:usedAny,t:"What went wrong this week?",hint:"Pick all that apply.",o:[["wrong_time","It offered a time that did not work"],["broke_rule","It broke one of my rules (hours, days, Cassie, buffers)"],["tone","The draft did not sound like me"],["wrong_priority","It treated someone as more or less important than they are"],["missed","It missed a request I handed to it"],["slow","It was too slow"],["asked_too_much","It asked me about things it should have handled"],["should_ask","It should have asked me first and did not"],["nothing","Nothing went wrong",true]]},
+ {id:"autonomy",type:"multi",req:true,when:usedAny,t:"What would you be comfortable letting it do without your review?",hint:"Pick all that apply. This decides what we turn on next.",o:[["confirm_internal","Send confirmations for routine internal meetings"],["holds","Put tentative holds on my calendar"],["move_routine","Move routine meetings out of the way, and tell the people"],["send_staff","Reply to staff requests with times"],["send_known_donor","Reply to donors I already know with times"],["nothing","Nothing yet, I want to review everything",true]]},
+ {id:"good",type:"text",req:false,when:usedAny,t:"One thing it got right",hint:"Optional."},
+ {id:"fix",type:"text",req:false,t:"One thing to change before next week",hint:"Optional. If you did not use it, what got in the way?"}
+];
+function usedAny(a){return a.used==="regular"||a.used==="little"}
+function visible(){return Q.filter(function(q){return !q.when||q.when(S.ans)})}
+function answered(q){var v=S.ans[q.id];return q.type==="multi"?(v&&v.length>0):(v!==undefined&&v!==""&&v!==null)}
+function ready(){return visible().every(function(q){return !q.req||answered(q)})}
+function progress(){var v=visible().filter(function(q){return q.req});var n=v.filter(answered).length;return v.length?Math.round(100*n/v.length):0}
+
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S.ans))}catch(e){}}
+function pushDraft(submit){
+  return rpc("save_agent_feedback",{p_token:TOKEN,p_week:WEEK,p_answers:clean(),p_submit:!!submit}).then(function(ok){S.saveErr=!ok;return ok}).catch(function(){S.saveErr=true;return false});
+}
+function clean(){var out={};visible().forEach(function(q){if(S.ans[q.id]!==undefined)out[q.id]=S.ans[q.id]});return out}
+function queue(){persist();clearTimeout(S.timer);S.timer=setTimeout(function(){pushDraft(false).then(status)},900)}
+
+function set(id,val){S.ans[id]=val;queue();paint(false)}
+function toggle(id,val,excl){
+  var a=(S.ans[id]||[]).slice(),i=a.indexOf(val);
+  if(i>=0)a.splice(i,1);
+  else{ if(excl)a=[val]; else{a=a.filter(function(x){return x!=="nothing"});a.push(val)}}
+  set(id,a);
+}
+
+function qHtml(q){
+  var h='<section class="q"><h2>'+esc(q.t)+'</h2>'+(q.hint?'<p class="hint">'+esc(q.hint)+'</p>':'');
+  if(q.type==="one"){h+='<div class="opts">'+q.o.map(function(o){return '<button class="opt" data-q="'+q.id+'" data-v="'+o[0]+'" aria-pressed="'+(S.ans[q.id]===o[0])+'"><span class="mk"></span><span>'+esc(o[1])+'</span></button>'}).join("")+'</div>'}
+  if(q.type==="multi"){h+='<div class="opts">'+q.o.map(function(o){var on=(S.ans[q.id]||[]).indexOf(o[0])>=0;return '<button class="opt multi" data-q="'+q.id+'" data-v="'+o[0]+'" data-x="'+(o[2]?1:0)+'" aria-pressed="'+on+'"><span class="mk"></span><span>'+esc(o[1])+'</span></button>'}).join("")+'</div>'}
+  if(q.type==="scale"){
+    h+='<div class="legend">'+q.legend.map(function(l,i){return '<span><b>'+(i+1)+'</b>'+esc(l)+'</span>'}).join("")+'</div><div class="scale">'+[1,2,3,4,5].map(function(n){return '<button data-q="'+q.id+'" data-v="'+n+'" aria-label="'+n+' of 5: '+esc(q.legend[n-1])+'" aria-pressed="'+(S.ans[q.id]===n)+'">'+n+'</button>'}).join("")+'</div>'}
+  if(q.type==="text"){h+='<textarea data-t="'+q.id+'" maxlength="1500" aria-label="'+esc(q.t)+'">'+esc(S.ans[q.id]||"")+'</textarea>'}
+  return h+'</section>';
+}
+
+function status(){var el=document.getElementById("st");if(el)el.textContent=S.saveErr?"Could not save just now. Your answers are kept on this device; try Send again.":"Saved as you go."}
+
+function paint(full){
+  if(S.valid===false){app.innerHTML='<div class="bad"><h1>This link does not look right</h1><p class="lede">Please use the link from your weekly reminder.</p></div>';return}
+  if(S.valid===null){app.innerHTML='<div class="bad"><p class="lede">Loading</p></div>';return}
+  var active=document.activeElement,keep=active&&active.tagName==="TEXTAREA"?active.getAttribute("data-t"):null,pos=keep?active.selectionStart:0;
+  var done=S.sent;
+  app.innerHTML='<header><p class="eyebrow">Week of '+esc(label(WEEK))+'</p><h1>How did the scheduling agent do?</h1><p class="lede">About two minutes. Your answers decide what changes next week.</p><div class="bar"><i style="width:'+(done?100:progress())+'%"></i></div></header>'
+   +'<main>'+(done?'<div class="done"><h2 style="font-size:26px;font-weight:300;letter-spacing:-.03em">Thank you, that is sent.</h2><p class="lede">You can change any answer until the end of the week and send again.</p></div>':'')
+   +visible().map(qHtml).join("")
+   +'<div class="foot"><button class="btn" id="send" '+(ready()?'':'disabled')+'>'+(done?'Send updated answers':'Send my answers')+'</button><p class="status" id="st" role="status"></p></div></main>';
+  status();
+  if(keep){var t=app.querySelector('[data-t="'+keep+'"]');if(t){t.focus();t.setSelectionRange(pos,pos)}}
+}
+
+app.addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  if(b.id==="send"){
+    if(!ready())return;b.disabled=true;b.textContent="Sending";
+    clearTimeout(S.timer);
+    pushDraft(true).then(function(ok){if(ok){S.sent=true;try{localStorage.removeItem(KEY)}catch(e){}}paint(true);window.scrollTo({top:0,behavior:"smooth"})});return}
+  var q=b.getAttribute("data-q");if(!q)return;
+  var def=Q.filter(function(x){return x.id===q})[0],v=b.getAttribute("data-v");
+  if(def.type==="multi")toggle(q,v,b.getAttribute("data-x")==="1");
+  else set(q,def.type==="scale"?+v:v);
+});
+app.addEventListener("input",function(e){var id=e.target.getAttribute&&e.target.getAttribute("data-t");if(id){S.ans[id]=e.target.value;queue()}});
+
+(function init(){
+  if(!TOKEN){S.valid=false;paint();return}
+  paint();
+  var local={};try{local=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+  rpc("get_agent_feedback",{p_token:TOKEN,p_week:WEEK}).then(function(r){
+    if(!r||r.valid===false){S.valid=false;paint();return}
+    S.valid=true;S.sent=!!r.submitted;S.ans=Object.assign({},r.answers||{},S.sent?{}:local);paint();
+  }).catch(function(){S.valid=true;S.ans=local;S.saveErr=true;paint()});
+})();
+</script>
+</body>
+</html>
